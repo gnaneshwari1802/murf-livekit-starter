@@ -217,7 +217,7 @@ STT is configured in `backend/src/agent.py` in the `AgentSession(stt=...)` call.
 
 ### LLM (Gemini vs OpenAI)
 
-- **Gemini (default):** Set `GOOGLE_API_KEY` and use `llm=google.LLM(model="gemini-2.5-flash")` in `agent.py`.
+- **Gemini (default):** Set `GOOGLE_API_KEY` and use `llm=google.LLM(model="gemini-2.0-flash-001")` in `agent.py`.
 - **OpenAI:** Set `OPENAI_API_KEY`, add the OpenAI plugin, and use the corresponding `llm=openai.LLM(...)` in `agent.py`.
 
 ### Audio format

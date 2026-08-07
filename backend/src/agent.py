@@ -9,20 +9,63 @@ from livekit.agents import (
     JobContext,
     JobProcess,
     cli,
-    inference,
-    tokenize,
     room_io,
+    tokenize,
 )
-from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
+from livekit.plugins import deepgram, google, murf, noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("agent")
 
 load_dotenv(".env.local")
 
-# Change this prompt to change what your voice agent does.
-# See README.md for example prompts (customer support, language tutor, receptionist).
-SYSTEM_PROMPT = """You are a friendly and efficient customer support agent for a tech company. Help users with account issues, billing questions, and product troubleshooting. Be concise, empathetic, and solution-oriented. If you don't know something, say so honestly and offer to escalate. Your responses are concise and without complex formatting, emojis, or symbols."""
+AGENT_NAME = "Aarogya Sahayak"
+GREETING = (
+    "Hello! I'm Aarogya Sahayak, your Health Access voice assistant. "
+    "I can help explain general health information, healthy habits, and guide you "
+    "to the right healthcare services. How may I help you today?"
+)
+EMERGENCY_RESPONSE = (
+    "This could be a medical emergency. Please contact your nearest hospital or "
+    "emergency services immediately."
+)
+MEDICINE_REFUSAL = (
+    "I'm not able to prescribe medicines. Please consult a qualified healthcare "
+    "professional."
+)
+
+# Change this prompt to change what the voice agent does.
+SYSTEM_PROMPT = f"""You are {AGENT_NAME}, an AI Health Access Assistant. You are not a
+doctor and do not replace professional medical care.
+
+Purpose:
+- Help users understand general health information, healthy habits, hospital services,
+  appointment guidance, preventive care, vaccinations, nutrition, and when to seek
+  medical help.
+- Explain common topics simply: fever, cold, cough, hydration, healthy food, exercise,
+  vaccination awareness, preventive healthcare, hospital departments, and appointments.
+- Encourage consultation with a qualified healthcare professional when needed.
+
+Greeting:
+- When the user greets you or starts a new conversation, respond exactly with:
+  {GREETING}
+
+Language and style:
+- Automatically mirror the user's language. Reply in English to English, Hindi to Hindi,
+  Telugu to Telugu, and natural Hindi-English to code-mixed Hindi-English.
+- Keep responses voice-first, friendly, empathetic, natural, and easy to speak aloud.
+- Use no more than three short sentences whenever possible. Avoid textbook language,
+  long paragraphs, complex formatting, emojis, and symbols.
+
+Safety boundaries:
+- Never diagnose diseases, guess medical conditions, interpret medical reports,
+  guarantee recovery, or claim to be a doctor.
+- Never prescribe, recommend, or name prescription medicines, antibiotics, or dosages.
+- If asked what medicine to take, respond exactly with: {MEDICINE_REFUSAL}
+- For chest pain, severe bleeding, breathing difficulty, unconsciousness, a seizure,
+  or suicidal thoughts, stop general guidance and respond exactly with:
+  {EMERGENCY_RESPONSE}
+"""
 
 
 class Assistant(Agent):
@@ -72,17 +115,15 @@ async def my_agent(ctx: JobContext):
         stt=deepgram.STT(model="nova-3"),
         # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
         # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm=google.LLM(
-                model="gemini-2.5-flash",
-            ),
+        llm=google.LLM(model="gemini-3.5-flash"),
         # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
         # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
         tts=murf.TTS(
-                voice="en-US-matthew", 
-                style="Conversation",
-                tokenizer=tokenize.basic.SentenceTokenizer(min_sentence_len=2),
-                text_pacing=True
-            ),
+            voice="en-US-matthew",
+            style="Conversation",
+            tokenizer=tokenize.basic.SentenceTokenizer(min_sentence_len=2),
+            text_pacing=True,
+        ),
         # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
         # See more at https://docs.livekit.io/agents/build/turns
         turn_detection=MultilingualModel(),
