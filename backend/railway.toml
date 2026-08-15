@@ -2,5 +2,5 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "uv run python src/agent.py start"
+startCommand = "cd /app && uv run python src/agent.py start"
 restartPolicyType = "on_failure"
