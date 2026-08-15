@@ -9,6 +9,10 @@ FROM ghcr.io/astral-sh/uv:python${PYTHON_VERSION}-bookworm-slim AS base
 # Keeps Python from buffering stdout and stderr to avoid situations where
 # the application crashes without emitting any logs due to buffering.
 ENV PYTHONUNBUFFERED=1
+# Keep downloaded LiveKit/Hugging Face models with the application so the
+# non-root runtime user can load the same cache prepared during the build.
+ENV HF_HOME=/app/.cache/huggingface
+ENV XDG_CACHE_HOME=/app/.cache
 
 # --- Build stage ---
 # Install dependencies, build native extensions, and prepare the application
@@ -47,7 +51,7 @@ COPY . .
 # Pre-download any ML models or files the agent needs
 # This ensures the container is ready to run immediately without downloading
 # dependencies at runtime, which improves startup time and reliability
-RUN uv run "src/agent.py" download-files
+RUN uv run python src/agent.py download-files
 
 # --- Production stage ---
 # Build tools (gcc, g++, python3-dev) are not included in the final image
