@@ -1,8 +1,8 @@
 import asyncio
 import json
 import logging
-import os
 import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -26,6 +26,7 @@ from livekit.plugins import deepgram, google, murf, noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from caller_memory import CallerMemoryStore
+from outbound_calling import SuppressionStore, detect_opt_out, is_valid_sip_uri
 
 logger = logging.getLogger("agent")
 
@@ -90,6 +91,20 @@ def get_outbound_phone_number(metadata: str) -> str | None:
         )
         return None
     return phone_number
+
+
+def get_outbound_context(metadata: str) -> tuple[str, str] | None:
+    """Read outbound service metadata without accepting arbitrary SIP requests."""
+    try:
+        payload = json.loads(metadata or "{}")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict) or not payload.get("outbound"):
+        return None
+    call_id, destination = payload.get("call_id"), payload.get("destination")
+    if not isinstance(call_id, str) or not is_valid_sip_uri(destination):
+        return None
+    return call_id, destination
 
 
 def add_current_language_instruction(turn_ctx, caller_message: str) -> None:
@@ -298,6 +313,18 @@ Outbound Health follow-up calls:
 - End an outbound call politely after the short follow-up. Do not make claims about
   appointments, diagnoses, treatment, or personal medical information that you cannot verify.
 
+Outbound learning-practice calls:
+- The call may be a VoiceForBharat scheduled daily learning-practice call. In that
+  case the first two spoken sentences must say that you are the VoiceForBharat learning
+  assistant (an AI voice agent), why you called, and that the learner can say "stop"
+  or hang up at any time. Ask permission before beginning a short practice activity.
+- Keep the activity optional, useful, and under two or three minutes. Never claim to
+  be human or imply that a person is listening.
+- Immediately respect "stop", "don't call", "do not call again", "remove me",
+  "unsubscribe", "not interested", "wrong number", or "busy". Do not persuade the
+  caller. Acknowledge the request, use record_outbound_opt_out for opt-out requests,
+  and close the interaction politely.
+
 Safety boundaries:
 - Never diagnose diseases, guess medical conditions, interpret medical reports,
   guarantee recovery, claim to be a doctor, provide false medical certainty, or invent
@@ -395,13 +422,35 @@ class Assistant(Agent):
         self,
         caller_id: str = "anonymous",
         memory_store: CallerMemoryStore | None = None,
+        outbound_destination: str | None = None,
+        end_outbound_call: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
         self.caller_id = caller_id
         self.memory_store = memory_store or CallerMemoryStore()
+        self.outbound_destination = outbound_destination
+        self.end_outbound_call = end_outbound_call
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         add_current_language_instruction(turn_ctx, new_message.text_content)
+
+    @function_tool
+    async def record_outbound_opt_out(
+        self, context: RunContext, caller_message: str
+    ) -> str:
+        """Persist an outbound caller's opt-out and end the optional interaction.
+
+        Use only when the caller asks to stop future automated calls, says they are not
+        interested, says it is a wrong number, or uses an equivalent opt-out phrase.
+        """
+        if not self.outbound_destination or not detect_opt_out(caller_message):
+            return "No outbound opt-out was recorded."
+        SuppressionStore().suppress(self.outbound_destination)
+        logger.info("Outbound caller opted out; future automated calls are suppressed")
+        if self.end_outbound_call:
+            await self.end_outbound_call()
+        context.session.shutdown(drain=True)
+        return "Opt-out recorded. Acknowledge it briefly and end the call."
 
     @function_tool
     async def handoff_to_clinic_appointment_specialist(
@@ -520,70 +569,32 @@ async def my_agent(ctx: JobContext):
         "room": ctx.room.name,
     }
 
+    outbound_context = get_outbound_context(ctx.job.metadata)
     phone_number = get_outbound_phone_number(ctx.job.metadata)
-    is_outbound = phone_number is not None
+    is_outbound = outbound_context is not None
 
     async def log_call_end(reason: str) -> None:
         logger.info(
             "Call ended: room=%s participant=%s outbound=%s reason=%s",
             ctx.room.name,
-            mask_phone_number(phone_number) if is_outbound else "web-or-inbound",
+            "configured-sip-destination" if is_outbound else "web-or-inbound",
             is_outbound,
             reason,
         )
 
     ctx.add_shutdown_callback(log_call_end)
-    if ctx.job.metadata and "phone_number" in ctx.job.metadata and not is_outbound:
-        logger.error(
-            "Outbound call request rejected due to invalid metadata or phone number"
-        )
+    if ctx.job.metadata and '"outbound"' in ctx.job.metadata and not is_outbound:
+        logger.error("Outbound call request rejected due to invalid metadata")
         ctx.shutdown()
         return
 
     await ctx.connect()
 
-    if is_outbound:
-        trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
-        if not trunk_id:
-            logger.error(
-                "Outbound call cannot start: SIP_OUTBOUND_TRUNK_ID is not configured"
-            )
-            ctx.shutdown()
-            return
-
-        logger.info(
-            "Outbound call requested: room=%s destination=%s",
-            ctx.room.name,
-            mask_phone_number(phone_number),
-        )
-        try:
-            logger.info("Creating SIP participant: room=%s", ctx.room.name)
-            await ctx.api.sip.create_sip_participant(
-                api.CreateSIPParticipantRequest(
-                    room_name=ctx.room.name,
-                    sip_trunk_id=trunk_id,
-                    sip_call_to=phone_number,
-                    participant_identity=phone_number,
-                    participant_name="Health Access caller",
-                    wait_until_answered=True,
-                )
-            )
-            logger.info(
-                "Outbound call answered: destination=%s",
-                mask_phone_number(phone_number),
-            )
-        except Exception:
-            logger.exception(
-                "Outbound SIP call failed: room=%s destination=%s",
-                ctx.room.name,
-                mask_phone_number(phone_number),
-            )
-            ctx.shutdown()
-            return
-
     # A LiveKit participant identity is stable across rooms when the frontend supplies
     # one. It is the durable key; no medical information is placed in the room name.
-    participant = await ctx.wait_for_participant(identity=phone_number)
+    participant = await ctx.wait_for_participant(
+        identity=outbound_context[0] if outbound_context else phone_number
+    )
     caller_id = participant.identity
     logger.info(
         "Call connected: room=%s participant=%s outbound=%s",
@@ -637,7 +648,21 @@ async def my_agent(ctx: JobContext):
 
     # Start the session, which initializes the voice pipeline and warms up the models
     await session.start(
-        agent=Assistant(caller_id=caller_id),
+        agent=Assistant(
+            caller_id=caller_id,
+            outbound_destination=outbound_context[1] if outbound_context else None,
+            end_outbound_call=(
+                lambda: (
+                    ctx.api.room.remove_participant(
+                        api.RoomParticipantIdentity(
+                            room=ctx.room.name, identity=outbound_context[0]
+                        )
+                    )
+                    if outbound_context
+                    else None
+                )
+            ),
+        ),
         room=ctx.room,
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
@@ -655,8 +680,11 @@ async def my_agent(ctx: JobContext):
         await session.generate_reply(
             instructions=(
                 "The callee has answered an outbound call. Begin the Health follow-up "
-                "call now: introduce yourself, explain why you are calling, and ask "
-                "whether this is a convenient time."
+                "learning-practice call now. Your first two sentences must be exactly: "
+                "'Hello, this is the VoiceForBharat learning assistant, an AI voice "
+                "agent calling for your scheduled daily practice. This is a short "
+                "optional practice call, and you can say stop or hang up at any time.' "
+                "Then ask whether the learner wants to continue."
             )
         )
 

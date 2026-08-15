@@ -9,6 +9,7 @@ from agent import (
     Assistant,
     ClinicAppointmentSpecialist,
     fetch_health_weather,
+    get_outbound_context,
     get_outbound_phone_number,
     is_valid_phone_number,
     mask_phone_number,
@@ -221,6 +222,61 @@ def test_outbound_phone_number_validation_and_masking() -> None:
     assert get_outbound_phone_number('{"phone_number":"invalid"}') is None
     assert get_outbound_phone_number("not-json") is None
     assert mask_phone_number("+919876543210") == "+91********10"
+
+
+def test_outbound_context_accepts_only_configured_sip_metadata() -> None:
+    assert get_outbound_context(
+        '{"outbound":true,"call_id":"call-123","destination":"sip:learner@sip.example.org"}'
+    ) == ("call-123", "sip:learner@sip.example.org")
+    assert (
+        get_outbound_context(
+            '{"outbound":true,"call_id":"call-123","destination":"+919876543210"}'
+        )
+        is None
+    )
+    assert get_outbound_context("not-json") is None
+
+
+@pytest.mark.asyncio
+async def test_outbound_opt_out_is_persisted_and_ends_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeStore:
+        destination: str | None = None
+
+        def suppress(self, destination: str) -> None:
+            self.destination = destination
+
+    class FakeSession:
+        shutdown_called = False
+
+        def shutdown(self, *, drain: bool) -> None:
+            assert drain is True
+            self.shutdown_called = True
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.session = FakeSession()
+
+    store = FakeStore()
+    ended = False
+
+    async def end_call() -> None:
+        nonlocal ended
+        ended = True
+
+    monkeypatch.setattr("agent.SuppressionStore", lambda: store)
+    context = FakeContext()
+    assistant = Assistant(
+        outbound_destination="sip:learner@sip.example.org", end_outbound_call=end_call
+    )
+
+    result = await assistant.record_outbound_opt_out(context, "Please don't call me")
+
+    assert result == "Opt-out recorded. Acknowledge it briefly and end the call."
+    assert store.destination == "sip:learner@sip.example.org"
+    assert context.session.shutdown_called
+    assert ended
 
 
 def _llm() -> llm.LLM:

@@ -208,91 +208,61 @@ Try: “Is it too hot to go outside in Hyderabad today?” See the
 [backend README](backend/README.md#day-5-live-health-weather-tool) for recording and
 failure-demo instructions.
 
-### Day 6: outbound Health follow-up calls
+### Day 6 — Production outbound calling
 
-The existing Health Access agent can now place a real outbound phone call through a
-LiveKit SIP outbound trunk. It keeps Murf Falcon with the `Anisha` voice and Deepgram
-Nova-3 multilingual STT (`language="multi"`), so English, Hindi, and natural
-Hindi-English conversations remain supported.
-
-#### Prerequisites and telephony setup
-
-1. Create and configure an outbound SIP trunk in your LiveKit project with a provider
-   that can call your intended destination numbers. LiveKit must be able to authenticate
-   to that trunk.
-2. Add the trunk ID to `backend/.env.local` as `SIP_OUTBOUND_TRUNK_ID`. Do not add SIP
-   credentials to the browser; they belong in the configured LiveKit trunk.
-3. Keep `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` in both backend and
-   frontend `.env.local` files. Set `AGENT_NAME=my-agent` in `frontend/.env.local`.
-4. Optionally set `OUTBOUND_DESTINATION_PHONE_NUMBER` in `frontend/.env.local` to a
-   test number in E.164 format. It is never returned by the API. Otherwise, enter the
-   number in the test UI.
-
-The backend rejects any destination that is not E.164 formatted, for example
-`+919876543210`. It logs only a masked number. It never logs keys, full phone numbers,
-or caller health details.
-
-#### Start and trigger a call (PowerShell)
-
-In one PowerShell window:
-
-```powershell
-Set-Location D:\murf-livekit-starter\backend
-uv sync
-uv run python src/agent.py download-files
-uv run python src/agent.py dev
+```
+Agent → LiveKit room → LiveKit SIP outbound trunk → Linphone SIP → Linphone app → learner
 ```
 
-In a second PowerShell window:
+Outbound SIP calls are initiated programmatically by the backend CLI; no inbound SIP
+dispatch rule is required. The existing `my-agent` is explicitly dispatched into a new
+room, then LiveKit dials the configured SIP URI. Murf Falcon (`Anisha`) remains the
+only TTS configured for this call path.
+
+Create `backend/.env.local` from `backend/.env.example`, set the LiveKit and model
+credentials, and set `LIVEKIT_SIP_OUTBOUND_TRUNK_ID`, `OUTBOUND_SIP_URI`, and
+`AGENT_NAME=my-agent`. Configure the Linphone account in the Linphone app with its SIP
+URI, username, domain, and password. The password is stored only in the existing
+LiveKit trunk/Linphone account—never in this repository or environment example.
+
+Windows PowerShell setup and worker:
 
 ```powershell
-Set-Location D:\murf-livekit-starter\frontend
-pnpm install
-pnpm dev
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python backend\src\agent.py dev
 ```
 
-Open `http://localhost:3000`, enter an E.164 destination phone number under **Health
-follow-up call**, and select **Start follow-up call**. The UI means:
-
-- **Ready**: no request is in progress.
-- **Calling**: LiveKit accepted the dispatch; this is not a success claim.
-- **Connected**: LiveKit reports the SIP participant as active.
-- **Call ended**: a previously connected SIP participant is no longer active.
-- **Error**: validation, dispatch, or status lookup failed.
-
-You can also call the existing Next.js route directly:
+With the worker running, validate without a call:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri http://localhost:3000/api/outbound-call `
-  -ContentType 'application/json' `
-  -Body '{"phone_number":"+919876543210"}'
+python run.py --check-telephony
+python run.py --outbound --dry-run
 ```
 
-The route creates a room, explicitly dispatches `my-agent` with the number in private
-job metadata, and the backend creates the SIP participant with
-`SIP_OUTBOUND_TRUNK_ID`. A successful HTTP response means only that dispatch was
-accepted; the status endpoint and UI report **Connected** only after LiveKit confirms
-the SIP call is active.
+Place the first authorised test call (Linphone must be online):
 
-#### Day 6 test procedure
+```powershell
+python run.py --outbound --to sip:your-user@sip.linphone.org
+```
 
-1. Start the backend and frontend with the commands above.
-2. Trigger an outbound call to a number you are authorised to call and answer it.
-3. Confirm Aarogya Sahayak introduces itself, explains the Health follow-up purpose,
-   and asks whether it is convenient to speak.
-4. Have a short English conversation, then a Hindi conversation, then a Hindi-English
-   code-mixed conversation. Confirm Hindi is spoken/written in Devanagari where text is
-   produced.
-5. Ask for a diagnosis or prescription. Confirm the agent refuses and recommends an
-   appropriate qualified healthcare professional.
-6. End the call. Confirm the UI changes to **Call ended**, the backend logs a masked
-   call-end event, and the backend process remains running.
+The learner first hears an AI disclosure, why the call was placed, and that they can
+say “stop” or hang up at any time. The call only reports `answered` after the SIP
+participant is active; it maps SIP failures to `no_answer`, `busy`, `rejected`, or
+`failed`. A no-answer is retried at most once by default; rejected calls and hang-ups
+are never retried. `--idempotency-key` prevents duplicate requests unless `--force` is
+deliberately supplied.
 
-Troubleshooting: an immediate error usually means the frontend LiveKit credentials or
-agent name are missing; a call that never connects typically means
-`SIP_OUTBOUND_TRUNK_ID`, the LiveKit outbound trunk, destination permission, or carrier
-configuration needs attention. Review backend logs for the room ID and masked call
-outcome. Do not put provider secrets in the frontend or commit either `.env.local`.
+Saying “stop”, “don't call me”, “remove me”, “unsubscribe”, “not interested”, or
+“wrong number” creates a durable local suppression entry and ends the optional flow.
+Logs are structured and mask the SIP destination. Do not commit `.env.local`, SQLite
+call data, recordings, credentials, or generated secrets.
+
+Troubleshooting: a health-check failure names the missing configuration variable. A
+failure after dialing usually indicates the outbound trunk ID, LiveKit SIP trunk
+configuration, Linphone registration, or network reachability. No real call is made
+by the health check, dry run, or automated tests.
 
 ---
 

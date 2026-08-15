@@ -1,0 +1,2 @@
+# Windows venv convenience install. Dependencies remain defined in backend/pyproject.toml.
+-e ./backend
