@@ -6,6 +6,11 @@ import type { AppConfig } from '@/app-config';
 export const CONFIG_ENDPOINT = process.env.NEXT_PUBLIC_APP_CONFIG_ENDPOINT;
 export const SANDBOX_ID = process.env.SANDBOX_ID;
 
+function getApiUrl(path: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+  return new URL(path, baseUrl).toString();
+}
+
 export interface SandboxConfig {
   [key: string]:
     | { type: 'string'; value: string }
@@ -97,7 +102,10 @@ export function getStyles(appConfig: AppConfig) {
  */
 export function getSandboxTokenSource(appConfig: AppConfig) {
   return TokenSource.custom(async () => {
-    const url = new URL(process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT!, window.location.origin);
+    const url = new URL(
+      process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT!,
+      process.env.NEXT_PUBLIC_API_URL || window.location.origin
+    );
     const sandboxId = appConfig.sandboxId ?? '';
     const roomConfig = appConfig.agentName
       ? {
@@ -138,7 +146,7 @@ export function getLocalTokenSource() {
       window.localStorage.setItem(storageKey, callerId);
     }
 
-    const response = await fetch('/api/token', {
+    const response = await fetch(getApiUrl('/api/token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ caller_id: callerId }),

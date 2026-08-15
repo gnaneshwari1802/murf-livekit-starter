@@ -7,7 +7,7 @@
     "dev:turbopack": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint app components hooks lib app-config.ts next.config.ts eslint.config.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "shadcn:install": "pnpm dlx shadcn@latest add --yes --overwrite @agents-ui/agent-audio-visualizer-bar @agents-ui/agent-audio-visualizer-grid @agents-ui/agent-audio-visualizer-radial @agents-ui/agent-control-bar @agents-ui/agent-session-provider @agents-ui/agent-track-control @agents-ui/agent-track-toggle @agents-ui/agent-chat-transcript @agents-ui/agent-chat-indicator @agents-ui/start-audio-button @agents-ui/agent-audio-visualizer-aura @agents-ui/agent-audio-visualizer-wave @agents-ui/nextjs-api-token-route @agents-ui/agent-session-view-01 && pnpm format"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { AnimatePresence, motion } from 'motion/react';
 import { useAgent, useSessionContext } from '@livekit/components-react';
@@ -27,14 +27,6 @@ export function ViewController({ appConfig }: ViewControllerProps) {
   const { resolvedTheme } = useTheme();
   const [callState, setCallState] = useState<'ready' | 'connecting' | 'live' | 'ended'>('ready');
   const [microphoneError, setMicrophoneError] = useState<string | null>(null);
-  const [outboundPhoneNumber, setOutboundPhoneNumber] = useState('');
-  const [outboundState, setOutboundState] = useState<
-    'ready' | 'calling' | 'connected' | 'ended' | 'error'
-  >('ready');
-  const [outboundError, setOutboundError] = useState<string | null>(null);
-  const outboundRoomName = useRef<string | null>(null);
-  const outboundConnected = useRef(false);
-  const outboundRequestedAt = useRef<number | null>(null);
 
   useEffect(() => {
     if (callState === 'connecting' && isConnected) setCallState('live');
@@ -69,64 +61,6 @@ export function ViewController({ appConfig }: ViewControllerProps) {
     end();
   };
 
-  useEffect(() => {
-    if (outboundState !== 'calling' && outboundState !== 'connected') return;
-
-    const pollStatus = async () => {
-      if (!outboundRoomName.current) return;
-      try {
-        const response = await fetch(
-          `/api/outbound-call?room_name=${encodeURIComponent(outboundRoomName.current)}`,
-          { cache: 'no-store' }
-        );
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || 'Unable to read call status.');
-        if (body.status === 'connected') {
-          outboundConnected.current = true;
-          setOutboundState('connected');
-        } else if (body.status === 'ended') {
-          setOutboundState('ended');
-        } else if (outboundConnected.current) {
-          setOutboundState('ended');
-        } else if (
-          outboundRequestedAt.current &&
-          Date.now() - outboundRequestedAt.current > 60_000
-        ) {
-          setOutboundState('error');
-          setOutboundError(
-            'No connection was confirmed. The call may not have been answered or telephony setup may need attention.'
-          );
-        }
-      } catch (error) {
-        setOutboundState('error');
-        setOutboundError(error instanceof Error ? error.message : 'Unable to read call status.');
-      }
-    };
-
-    void pollStatus();
-    const intervalId = window.setInterval(() => void pollStatus(), 2_000);
-    return () => window.clearInterval(intervalId);
-  }, [outboundState]);
-
-  const startOutboundCall = async () => {
-    setOutboundError(null);
-    outboundConnected.current = false;
-    try {
-      const response = await fetch('/api/outbound-call', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number: outboundPhoneNumber }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || 'Unable to request outbound call.');
-      outboundRoomName.current = body.room_name;
-      outboundRequestedAt.current = Date.now();
-      setOutboundState('calling');
-    } catch (error) {
-      setOutboundState('error');
-      setOutboundError(error instanceof Error ? error.message : 'Unable to request outbound call.');
-    }
-  };
   const showSession = callState === 'live' && isConnected;
 
   return (
@@ -139,11 +73,6 @@ export function ViewController({ appConfig }: ViewControllerProps) {
           onStartCall={startCall}
           isConnecting={callState === 'connecting'}
           microphoneError={microphoneError}
-          outboundPhoneNumber={outboundPhoneNumber}
-          onOutboundPhoneNumberChange={setOutboundPhoneNumber}
-          onStartOutboundCall={startOutboundCall}
-          outboundState={outboundState}
-          outboundError={outboundError}
         />
       )}
       {showSession && (
