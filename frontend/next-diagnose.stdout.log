@@ -1,0 +1,20 @@
+   ▲ Next.js 15.5.9
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.29.192:3001
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 19.3s
+ ○ Compiling /api/token ...
+ ✓ Compiled /api/token in 26.7s (501 modules)
+ POST /api/token 200 in 6388ms
+ ○ Compiling / ...
+ ✓ Compiled / in 172.8s (18976 modules)
+ GET / 200 in 105427ms
+ ✓ Compiled in 7s (9437 modules)
+ ✓ Compiled in 10.7s (9437 modules)
+ ✓ Compiled in 1498ms (9437 modules)
+ ✓ Compiled in 2.1s (9437 modules)
+ ✓ Compiled in 984ms (9437 modules)
+ ✓ Compiled in 3s (9446 modules)
+ ✓ Compiled in 2.2s (9446 modules)

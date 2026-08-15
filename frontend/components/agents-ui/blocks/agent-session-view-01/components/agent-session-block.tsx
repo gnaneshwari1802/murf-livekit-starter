@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Mic, Volume2 } from 'lucide-react';
 import { AnimatePresence, type MotionProps, motion } from 'motion/react';
 import { useAgent, useSessionContext, useSessionMessages } from '@livekit/components-react';
 import { AgentChatTranscript } from '@/components/agents-ui/agent-chat-transcript';
@@ -153,6 +154,10 @@ export interface AgentSessionView_01Props {
   audioVisualizerWaveLineWidth?: number;
   /** Optional class name merged onto the outer `<section>` container. */
   className?: string;
+  /** Called when the participant ends the call. */
+  onEndCall?: () => void;
+  /** Called when the browser cannot access the microphone. */
+  onMicrophoneError?: (error: Error) => void;
 }
 
 export function AgentSessionView_01({
@@ -171,6 +176,8 @@ export function AgentSessionView_01({
   audioVisualizerRadialBarCount,
   audioVisualizerRadialRadius,
   audioVisualizerWaveLineWidth,
+  onEndCall,
+  onMicrophoneError,
   ref,
   className,
   ...props
@@ -180,6 +187,13 @@ export function AgentSessionView_01({
   const [chatOpen, setChatOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { state: agentState } = useAgent();
+  const isSpeaking = agentState === 'speaking';
+  const isListening = agentState === 'listening' || agentState === 'idle';
+  const speakerLabel = isSpeaking
+    ? 'Aarogya Sahayak is speaking'
+    : isListening
+      ? 'Listening to you'
+      : 'Aarogya Sahayak is preparing a response';
 
   const controls: AgentControlBarControls = {
     leave: true,
@@ -205,6 +219,15 @@ export function AgentSessionView_01({
       {...props}
     >
       <Fade top className="absolute inset-x-4 top-0 z-10 h-40" />
+      <div className="bg-background/90 absolute top-6 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full border border-teal-700/15 px-4 py-2 text-xs font-semibold shadow-sm backdrop-blur">
+        {isSpeaking ? (
+          <Volume2 className="size-4 text-teal-700" />
+        ) : (
+          <Mic className="size-4 text-teal-700" />
+        )}
+        <span>{speakerLabel}</span>
+        <span className="size-1.5 animate-pulse rounded-full bg-teal-600" aria-hidden="true" />
+      </div>
       {/* transcript */}
 
       <div className="absolute top-0 bottom-[135px] flex w-full flex-col md:bottom-[170px]">
@@ -264,8 +287,9 @@ export function AgentSessionView_01({
             controls={controls}
             isChatOpen={chatOpen}
             isConnected={session.isConnected}
-            onDisconnect={session.end}
+            onDisconnect={onEndCall ?? session.end}
             onIsChatOpenChange={setChatOpen}
+            onDeviceError={({ error }) => onMicrophoneError?.(error)}
           />
         </div>
       </motion.div>

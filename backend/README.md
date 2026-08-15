@@ -68,6 +68,23 @@ uv run python src/agent.py start
 
 All configuration lives in [`src/agent.py`](src/agent.py).
 
+## Day 5: Live health-weather tool
+
+`lookup_health_weather` gives Aarogya Sahayak current temperature, feels-like
+temperature, humidity, precipitation, and observation time for a caller's named
+location. It uses the public [Open-Meteo](https://open-meteo.com/) geocoding and
+forecast APIs, so this is **live data**, not a local dataset, and no API key is needed.
+
+Ask a question such as: “Is it too hot to go outside in Hyderabad today?” The agent
+calls the tool, mentions the observation time, then gives brief general heat-safety
+guidance. If the service times out, returns invalid data, or cannot find the location,
+the tool returns an explicit unavailable result. The agent must say live conditions
+could not be checked and must not invent a forecast.
+
+For a Day 5 recording, run `uv run python src/agent.py dev`, connect through the UI,
+and ask the example question. To demonstrate the failure path, temporarily disconnect
+network access, ask again, and show the spoken unavailable fallback.
+
 ### System prompt
 
 The `SYSTEM_PROMPT` constant at the top of `agent.py` controls what your agent does. Change it to build any voice-powered use case.

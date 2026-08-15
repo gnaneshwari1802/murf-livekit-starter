@@ -196,6 +196,104 @@ You are a professional receptionist for a medical clinic. Help callers schedule 
 
 See the Configuration section below for voice, STT, and LLM options.
 
+### Day 5: live Health Access lookup
+
+This Health Access configuration includes `lookup_health_weather`, which fetches live
+current conditions for a caller's city, town, village, or district from Open-Meteo.
+It is **live data**, not a local dataset. The tool returns the local observation time
+with temperature, feels-like temperature, humidity, and precipitation; if Open-Meteo
+is unavailable, the agent says it cannot check live conditions rather than guessing.
+
+Try: “Is it too hot to go outside in Hyderabad today?” See the
+[backend README](backend/README.md#day-5-live-health-weather-tool) for recording and
+failure-demo instructions.
+
+### Day 6: outbound Health follow-up calls
+
+The existing Health Access agent can now place a real outbound phone call through a
+LiveKit SIP outbound trunk. It keeps Murf Falcon with the `Anisha` voice and Deepgram
+Nova-3 multilingual STT (`language="multi"`), so English, Hindi, and natural
+Hindi-English conversations remain supported.
+
+#### Prerequisites and telephony setup
+
+1. Create and configure an outbound SIP trunk in your LiveKit project with a provider
+   that can call your intended destination numbers. LiveKit must be able to authenticate
+   to that trunk.
+2. Add the trunk ID to `backend/.env.local` as `SIP_OUTBOUND_TRUNK_ID`. Do not add SIP
+   credentials to the browser; they belong in the configured LiveKit trunk.
+3. Keep `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` in both backend and
+   frontend `.env.local` files. Set `AGENT_NAME=my-agent` in `frontend/.env.local`.
+4. Optionally set `OUTBOUND_DESTINATION_PHONE_NUMBER` in `frontend/.env.local` to a
+   test number in E.164 format. It is never returned by the API. Otherwise, enter the
+   number in the test UI.
+
+The backend rejects any destination that is not E.164 formatted, for example
+`+919876543210`. It logs only a masked number. It never logs keys, full phone numbers,
+or caller health details.
+
+#### Start and trigger a call (PowerShell)
+
+In one PowerShell window:
+
+```powershell
+Set-Location D:\murf-livekit-starter\backend
+uv sync
+uv run python src/agent.py download-files
+uv run python src/agent.py dev
+```
+
+In a second PowerShell window:
+
+```powershell
+Set-Location D:\murf-livekit-starter\frontend
+pnpm install
+pnpm dev
+```
+
+Open `http://localhost:3000`, enter an E.164 destination phone number under **Health
+follow-up call**, and select **Start follow-up call**. The UI means:
+
+- **Ready**: no request is in progress.
+- **Calling**: LiveKit accepted the dispatch; this is not a success claim.
+- **Connected**: LiveKit reports the SIP participant as active.
+- **Call ended**: a previously connected SIP participant is no longer active.
+- **Error**: validation, dispatch, or status lookup failed.
+
+You can also call the existing Next.js route directly:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:3000/api/outbound-call `
+  -ContentType 'application/json' `
+  -Body '{"phone_number":"+919876543210"}'
+```
+
+The route creates a room, explicitly dispatches `my-agent` with the number in private
+job metadata, and the backend creates the SIP participant with
+`SIP_OUTBOUND_TRUNK_ID`. A successful HTTP response means only that dispatch was
+accepted; the status endpoint and UI report **Connected** only after LiveKit confirms
+the SIP call is active.
+
+#### Day 6 test procedure
+
+1. Start the backend and frontend with the commands above.
+2. Trigger an outbound call to a number you are authorised to call and answer it.
+3. Confirm Aarogya Sahayak introduces itself, explains the Health follow-up purpose,
+   and asks whether it is convenient to speak.
+4. Have a short English conversation, then a Hindi conversation, then a Hindi-English
+   code-mixed conversation. Confirm Hindi is spoken/written in Devanagari where text is
+   produced.
+5. Ask for a diagnosis or prescription. Confirm the agent refuses and recommends an
+   appropriate qualified healthcare professional.
+6. End the call. Confirm the UI changes to **Call ended**, the backend logs a masked
+   call-end event, and the backend process remains running.
+
+Troubleshooting: an immediate error usually means the frontend LiveKit credentials or
+agent name are missing; a call that never connects typically means
+`SIP_OUTBOUND_TRUNK_ID`, the LiveKit outbound trunk, destination permission, or carrier
+configuration needs attention. Review backend logs for the room ID and masked call
+outcome. Do not put provider secrets in the frontend or commit either `.env.local`.
+
 ---
 
 ## Configuration

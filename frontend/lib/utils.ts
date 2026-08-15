@@ -123,3 +123,29 @@ export function getSandboxTokenSource(appConfig: AppConfig) {
     }
   });
 }
+
+/**
+ * Keep a random, non-sensitive caller ID in this browser so a caller can be
+ * recognized on their next call without requiring an account or phone number.
+ */
+export function getLocalTokenSource() {
+  return TokenSource.custom(async () => {
+    const storageKey = 'aarogya-sahayak-caller-id';
+    let callerId = window.localStorage.getItem(storageKey);
+
+    if (!callerId) {
+      callerId = `voice_assistant_user_${crypto.randomUUID()}`;
+      window.localStorage.setItem(storageKey, callerId);
+    }
+
+    const response = await fetch('/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caller_id: callerId }),
+    });
+    if (!response.ok) {
+      throw new Error(`Could not start the call: ${response.statusText}`);
+    }
+    return response.json();
+  });
+}

@@ -43,10 +43,15 @@ export async function POST(req: Request) {
         { ignoreUnknownFields: true }
       );
     }
-      
+
     // Generate participant token
     const participantName = 'user';
-    const participantIdentity = `voice_assistant_user_${Math.floor(Math.random() * 10_000)}`;
+    const requestedCallerId = body?.caller_id;
+    const participantIdentity =
+      typeof requestedCallerId === 'string' &&
+      /^voice_assistant_user_[a-zA-Z0-9_-]{1,80}$/.test(requestedCallerId)
+        ? requestedCallerId
+        : `voice_assistant_user_${crypto.randomUUID()}`;
     const roomName = `voice_assistant_room_${Math.floor(Math.random() * 10_000)}`;
 
     const participantToken = await createParticipantToken(

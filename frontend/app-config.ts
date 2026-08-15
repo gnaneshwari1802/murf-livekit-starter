@@ -33,27 +33,26 @@ export interface AppConfig {
 }
 
 export const APP_CONFIG_DEFAULTS: AppConfig = {
-  companyName: 'Murf AI',
-  pageTitle: 'Voice Agent Starter',
+  companyName: 'Aarogya Sahayak',
+  pageTitle: 'Aarogya Sahayak | Health Access',
   pageDescription: 'A voice agent powered by Murf Falcon — the fastest TTS API',
 
   supportsChatInput: true,
-  supportsVideoInput: true,
-  supportsScreenShare: true,
+  supportsVideoInput: false,
+  supportsScreenShare: false,
   isPreConnectBufferEnabled: true,
 
   logo: '/murf-logo.svg',
-  accent: '#6366F1',
+  accent: '#0F766E',
   logoDark: '/murf-logo-dark.svg',
-  accentDark: '#818cf8',
-  startButtonText: 'Start talking',
+  accentDark: '#2DD4BF',
+  startButtonText: 'Start health conversation',
 
   // optional: audio visualization configuration
-  // audioVisualizerType: 'bar',
-  // audioVisualizerColor: '#002cf2',
-  // audioVisualizerColorDark: '#1fd5f9',
-  // audioVisualizerColorShift: 0.3,
-  // audioVisualizerBarCount: 5,
+  audioVisualizerType: 'aura',
+  audioVisualizerColor: '#0F766E',
+  audioVisualizerColorDark: '#2DD4BF',
+  audioVisualizerColorShift: 0.2,
   // audioVisualizerType: 'radial',
   // audioVisualizerRadialBarCount: 24,
   // audioVisualizerRadialRadius: 100,
